@@ -1,22 +1,17 @@
-const express = require("express");
+const Fastify = require("fastify");
 const axios = require("axios");
 const cheerio = require("cheerio");
-const cors = require("cors");
 
-const app = express();
-const PORT = process.env.PORT || 5050;
+const fastify = Fastify({ logger: true });
 
+// ✅ CORS for all origins
+fastify.register(require("@fastify/cors"), { origin: true });
 
-app.use(cors());
-app.options("*", cors());
-app.use(express.json());
-
-app.post("/check", async (req, res) => {
-  console.log("✅ Request received from frontend");
-  const url = req.body.url;
+fastify.post("/check", async (request, reply) => {
+  const url = request.body.url;
 
   if (!url) {
-    return res.status(400).json({ error: "URL is required" });
+    return reply.status(400).send({ error: "URL is required" });
   }
 
   try {
@@ -38,6 +33,7 @@ app.post("/check", async (req, res) => {
       telDIDs: [],
     };
 
+    // Check GTM in <head>
     $("head script").each((_, el) => {
       const script = $(el).html();
       if (script && script.includes("googletagmanager.com/gtm.js")) {
@@ -46,6 +42,7 @@ app.post("/check", async (req, res) => {
       }
     });
 
+    // Check GTM in <body>
     $("body noscript").each((_, el) => {
       const noscript = $(el).html();
       if (noscript && noscript.includes("googletagmanager.com/ns.html")) {
@@ -54,6 +51,7 @@ app.post("/check", async (req, res) => {
       }
     });
 
+    // Check Ringba
     $("script").each((_, el) => {
       const script = $(el).html();
       if (script && script.includes("ringba.com")) {
@@ -62,18 +60,23 @@ app.post("/check", async (req, res) => {
       }
     });
 
+    // Check tel: DIDs
     $("a[href^='tel:']").each((_, el) => {
       const href = $(el).attr("href");
       if (href) results.telDIDs.push(href);
     });
 
-    return res.json(results);
+    reply.send(results);
   } catch (err) {
-    console.error("❌ Error:", err.message);
-    return res.status(500).json({ error: err.message });
+    reply.status(500).send({ error: err.message });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+// Start the server
+fastify.listen({ port: 5050, host: "0.0.0.0" }, (err, address) => {
+  if (err) {
+    fastify.log.error(err);
+    process.exit(1);
+  }
+  console.log(`🚀 Fastify server running at ${address}`);
 });

@@ -1,19 +1,15 @@
 {
-  "name": "backend_raghib",
+  "name": "lander-tag-checker",
   "version": "1.0.0",
-  "description": "",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "type": "commonjs",
+  "scripts": {
+    "start": "node index.js"
+  },
   "dependencies": {
+    "@fastify/cors": "^8.5.0",
     "axios": "^1.11.0",
     "cheerio": "^1.1.2",
-    "cors": "^2.8.5",
-    "express": "^5.1.0"
+    "fastify": "^4.29.1"
   }
 }
