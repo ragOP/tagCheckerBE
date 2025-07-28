@@ -4,6 +4,7 @@ const cheerio = require("cheerio");
 
 const fastify = Fastify({ logger: true });
 
+// ✅ CORS for all origins
 fastify.register(require("@fastify/cors"), { origin: true });
 
 fastify.post("/check", async (request, reply) => {
@@ -14,74 +15,56 @@ fastify.post("/check", async (request, reply) => {
   }
 
   try {
-    const response = await axios.get(url, { responseType: "text" });
-    const html = response.data;
+    const { data: html } = await axios.get(url);
     const $ = cheerio.load(html);
 
     const results = {
       url,
-      analytics: {
-        googleAnalytics: html.includes("googletagmanager.com/analytics.js") || html.includes("gtag"),
-        facebookPixel: html.includes("connect.facebook.net/en_US/fbevents.js"),
-        clarity: html.includes("clarity.ms"),
-        hotjar: html.includes("static.hotjar.com"),
-        tiktok: html.includes("tiktok.com/i18n/pixel"),
-        linkedin: html.includes("snap.licdn.com/li.lms-analytics")
+      googleTagManager: {
+        head: false,
+        body: false,
+        headCode: null,
+        bodyCode: null,
       },
-      security: {
-        insecureScripts: [],
-        iframes: [],
+      ringba: {
+        present: false,
+        snippet: null,
       },
-      performance: {
-        largeImages: [],
-        blockingScripts: [],
-        blockingCSS: []
-      },
-      conversion: {
-        ctaButtons: [],
-        ctaCount: 0
-      }
+      telDIDs: [],
     };
 
-    $("script[src]").each((_, el) => {
-      const src = $(el).attr("src");
-      if (src && src.startsWith("http://")) {
-        results.security.insecureScripts.push(src);
-      }
-
-      const hasAsyncOrDefer = $(el).attr("async") || $(el).attr("defer");
-      if (!hasAsyncOrDefer) {
-        results.performance.blockingScripts.push(src);
+    // Check GTM in <head>
+    $("head script").each((_, el) => {
+      const script = $(el).html();
+      if (script && script.includes("googletagmanager.com/gtm.js")) {
+        results.googleTagManager.head = true;
+        results.googleTagManager.headCode = script.trim();
       }
     });
 
-    $("iframe").each((_, el) => {
-      const src = $(el).attr("src");
-      if (src) results.security.iframes.push(src);
-    });
-
-    $("img").each((_, el) => {
-      const src = $(el).attr("src");
-      if (src && src.startsWith("http")) {
-        results.performance.largeImages.push(src);
+    // Check GTM in <body>
+    $("body noscript").each((_, el) => {
+      const noscript = $(el).html();
+      if (noscript && noscript.includes("googletagmanager.com/ns.html")) {
+        results.googleTagManager.body = true;
+        results.googleTagManager.bodyCode = noscript.trim();
       }
     });
 
-    $("link[rel='stylesheet']").each((_, el) => {
+    // Check Ringba
+    $("script").each((_, el) => {
+      const script = $(el).html();
+      if (script && script.includes("ringba.com")) {
+        results.ringba.present = true;
+        results.ringba.snippet = script.trim();
+      }
+    });
+
+    // Check tel: DIDs
+    $("a[href^='tel:']").each((_, el) => {
       const href = $(el).attr("href");
-      if (href && href.startsWith("http")) {
-        results.performance.blockingCSS.push(href);
-      }
+      if (href) results.telDIDs.push(href);
     });
-
-    const ctaKeywords = ["buy", "start", "get", "book", "order", "apply", "check", "claim"];
-    $("button, a").each((_, el) => {
-      const text = ($(el).text() || "").toLowerCase();
-      if (ctaKeywords.some(keyword => text.includes(keyword))) {
-        results.conversion.ctaButtons.push(text.trim());
-      }
-    });
-    results.conversion.ctaCount = results.conversion.ctaButtons.length;
 
     reply.send(results);
   } catch (err) {
@@ -89,6 +72,7 @@ fastify.post("/check", async (request, reply) => {
   }
 });
 
+// Start the server
 fastify.listen({ port: 5050, host: "0.0.0.0" }, (err, address) => {
   if (err) {
     fastify.log.error(err);
